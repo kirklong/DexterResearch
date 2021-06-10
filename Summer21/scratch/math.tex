@@ -1,0 +1,55 @@
+\documentclass{article}
+\usepackage{amsmath}
+%\addtolength{\textheight}{+ .1\textheight}
+\title{Disk-wind math}
+\author{Kirk Long}
+%\date{}
+\begin{document}
+\maketitle
+
+Following from the $\hat{n}$ given in Waters and the rate of strain tensor terms in spherical coordinates from Batchelor we verify and expand the result given in CM96:
+
+\begin{equation} \label{eq1}
+\begin{split}
+\hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} = & \sin^2i\left[\frac{\partial v_r}{\partial r}\sin^2\phi + \left(\frac{\partial v_\phi}{\partial r} - \frac{v_\phi}{r}\right)\sin\phi\cos\phi + \frac{v_r}{r}\cos^2\phi \right] \\
+& -\sin i\cos i\left[\left(\frac{1}{r}\frac{\partial v_r}{\partial \theta} + \frac{1}{r} \frac{\partial v_\theta}{\partial r} - \frac{v_\theta}{r^2}\right)\sin\phi  + \frac{1}{r}\frac{\partial v_\phi}{\partial \theta}\cos\phi\right] \\
+& +\cos^2i\left(\frac{1}{r}\frac{\partial v_\theta}{\partial \theta} + \frac{v_r}{r}\right)
+\end{split}
+\end{equation}
+
+Where in arriving at the form above we have assumed all of the $\frac{\partial}{\partial \phi}$ operator terms are 0 (axisymmetric) and the disk is in the equatorial plane ($\theta = \frac{\pi}{2}$) which allows us to significantly simplify $\hat{n} = \left(\sin\theta\cos\phi\sin i + \cos\theta\cos i\right)\hat{r} + \left(\cos\theta\cos\phi\sin i - \sin\theta\cos i\right)\hat{\theta} - \left(\sin\phi\sin i\right)\hat{\phi}$. Waters uses a $\phi$ convention that differs from CM96 by $-\frac{\pi}{2}$, and applying this to equation one gives us:
+
+\begin{equation} \label{eq2}
+\begin{split}
+\hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} = & \sin^2i\left[\frac{\partial v_r}{\partial r}\cos^2\phi - \left(\frac{\partial v_\phi}{\partial r} - \frac{v_\phi}{r}\right)\sin\phi\cos\phi + \frac{v_r}{r}\sin^2\phi \right] \\
+& -\sin i\cos i\left[\left(\frac{1}{r}\frac{\partial v_r}{\partial \theta} + \frac{1}{r} \frac{\partial v_\theta}{\partial r} - \frac{v_\theta}{r^2}\right) \cos\phi - \frac{1}{r}\frac{\partial v_\phi}{\partial \theta}\sin\phi\right] \\
+& +\cos^2i\left(\frac{1}{r}\frac{\partial v_\theta}{\partial \theta} + \frac{v_r}{r}\right)
+\end{split}
+\end{equation}
+
+In CM96 they assume that $v_r \approx 0$ but that there is an acceleration related to the escape velocity, ie $\frac{\partial v_r}{\partial r} \approx 3\sqrt{2}\frac{v_\phi}{r}$, where $v_\phi = \sqrt{\frac{GM}{r}}$ is the Keplerian $v_\phi$, which gives us $\frac{\partial v_\phi}{\partial r} =  \frac{-v_\phi}{2r}$.
+
+But what are the $\theta$ terms? Following in the footsteps of CM96 it makes sense to assume that on average $v_\theta \approx 0$ for the same reason $v_r \approx 0$, but similarly we will assume a particle may be lifted by the wind and accelerated to the local escape velocity (but now in the $\hat{\theta}$ direction) such that $\frac{\partial v_\theta}{\partial \theta} \approx \frac{v_{esc}}{\left(H/R\right)}$ and $\frac{\partial v_\theta}{\partial r} \approx \frac{\partial v_r}{\partial r}$. Since $v_\phi(r) \rightarrow \frac{\partial v_\phi}{\partial v_\theta} = 0$, and we also set $\frac{\partial v_r}{\partial \theta} = 0$. \textbf{But should it be? Should a tiny change in theta (lifting off the disk) then allow the thing to be radially accelerated away? Maybe this one should be also be like $\frac{v_{esc}}{(H/R)}$...}
+
+Plugging in these approximations reduces equation two to:
+
+\begin{equation} \label{eq3}
+\begin{split}
+\hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} = & 3\frac{v_\phi}{r} \sin^2i\cos\phi\left[\sqrt{2}\cos\phi + \frac{\sin\phi}{2}\right]\\
+& -\sin i \cos i \left[\frac{1}{r}3\sqrt{2}\frac{v_\phi}{r}\cos\phi\right] \\
+& +\cos^2i\left(\frac{1}{r}\frac{v_{esc}}{(H/R)}\right)
+\end{split}
+\end{equation}
+
+Rescaling $v_\phi$ into units of $r_s$ gives us $v_\phi = \sqrt{\frac{1}{2r'}}$ (where $r' = r/r_s$ and the extra factor of c is just absorbed into an overall normalizing constant since we normalize by the flux anyways). Similarly the $H/R$ dependence can be absorbed into an overall constant, and we can convert all our $1/r$ terms to be in terms of $r_s$ and absorb the extra scaling terms into our normalization, so that we get an equation that just shows us the $r$ dependence of the line of sight velocity gradient:
+
+\begin{equation} \label{eq4}
+\begin{split}
+\hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} \approx \frac{\mathrm{d}v_l}{\mathrm{d}l} \approx & \frac{3\sqrt{\frac{1}{2r}}}{r}\cos\phi\left[\sin^2i\left(\sqrt{2}\cos\phi + \frac{\sin\phi}{2}\right)-\frac{\sin i \cos i}{r}\right]\\
+& + \cos^2i\frac{1}{\sqrt{r^3}}
+\end{split}
+\end{equation}
+
+This is the form used currently in the fitting routine in the code. Since the $\sin i\cos i$ term is divided again by the radius and we are usually at $r_s > 1000$ this term is usually very small and does not contribute, but the inclination dependence makes the $\cos^2i$ term very important at low inclinations and changes the overall shape of the line profile significantly.
+
+\end{document}
