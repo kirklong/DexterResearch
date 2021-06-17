@@ -129,7 +129,7 @@ function pyMC(nWalkers,θ0,p0,log_prob,vel,data,threads,iter=100) #needed to wra
     else
         sampler = mc.EnsembleSampler(nWalkers,length(θ0),log_prob,args=(vel,data))
         println("running burn-in")
-        p0, _, _ = sampler.run_mcmc(p0,100,progress=true,skip_initial_state_check=true)
+        p0, _, _ = sampler.run_mcmc(p0,10,progress=true,skip_initial_state_check=true)
         sampler.reset()
         println("production run (n = $iter iterations)")
         pos, prob, state = sampler.run_mcmc(p0,iter,skip_initial_state_check=true,progress=true)
@@ -153,9 +153,9 @@ function main()
     end
     sampler,pos,prob,state = pyMC(nWalkers,θ0,p0,log_prob,vel,data,threads)
     println("saving emcee variables")
-    save("jPyMC.jld","sampler",sampler,"pos",pos,"prob",prob,"state",state)
+    save("jPyMC.jld","pos",pos,"prob",prob,"state",state) #can't write out the sampler I guess?
     println("flattening chains and saving")
-    flat_samples = sampler.get_chain(flat=True)
+    flat_samples = sampler.get_chain(flat=true)
     save("jPyMCFLAT.jld","flat_samples",flat_samples)
     println("exiting on successful completion")
 end
