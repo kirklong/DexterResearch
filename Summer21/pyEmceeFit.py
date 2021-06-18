@@ -92,7 +92,7 @@ def log_prob(θ,x,data):
     else:
         return lnP + log_lhood(θ,x,data)
 
-def MC(nWalkers,θ0,p0,log_prob,vel,data,threads,burn=100,iter=1000):
+def MC(nWalkers,θ0,p0,log_prob,vel,data,threads,burn=1000,iter=10000):
     with Pool(threads) as pool:
         sampler = emcee.EnsembleSampler(nWalkers,len(θ0),log_prob,args=(vel,data),pool=pool)
         print("running burn-in")
@@ -111,8 +111,8 @@ def main(specifyThreads = False):
     data = readPickle("3c273_juljanmarmay_append_gilles_specirf_wide_v6.p")
     λCen = 2.172
     vel = (data[0]-λCen)/λCen*3e5
-    pert = [45.,100.,0.5,0.5,0.5,0.5,0.5]
-    nWalkers = 50; θ0 = [45.,1e3,1.,1.3,0.5,0.5,0.5]
+    pert = [10.,100.,0.25,0.25,0.1,0.1,0.1] #i,rMin,Mfac,rFac,f1,f2,f3
+    nWalkers = 50; θ0 = [45.,1e3,1.,1.3,0.5,0.5,0.5] #i,rMin,Mfac,rFac,f1,f2,f3
     p0 = numpy.zeros((len(θ0),nWalkers))
     for n in range(len(pert)):
         p0[n] = [θ0[n]+pert[n]*numpy.random.randn(1) for j in range(nWalkers)]
