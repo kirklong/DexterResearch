@@ -63,24 +63,29 @@ def getProfiles(ν,params,data,bins=100,nx=2048,ny=2048):
             dφList.append(dφAvg)
     fline=flux/numpy.max(flux)*0.6/(1+flux/numpy.max(flux)*0.6)
     indx=[0,1,2,6,7,8,12,13,14,18,19,20]; oindx=[3,4,5,9,10,11,15,16,17,21,22,23]
-    x=(νBin-1)*3e5; yP=numpy.mean(numpy.array(dφList)[indx],axis=0)*fline*rFac; yPo=numpy.mean(numpy.array(dφList)[oindx],axis=0)*fline*rFac
-    interpPhase = numpy.interp(ν,x,yP); interpPhaseo = numpy.interp(ν,x,yPo)
+    interpPhaseList = []; x=(νBin-1)*3e5;
+    for i in range(len(dφList)):
+        yP=numpy.array(dφList[i])*fline*rFac
+        interpPhase = numpy.interp(ν,x,yP)
+        interpPhaseList.append(interpPhase)
+    #yPo=numpy.mean(numpy.array(dφList)[oindx],axis=0)*fline*rFac
+    # interpPhaseo = numpy.interp(ν,x,yPo)
     yL = flux/numpy.max(flux)*numpy.max(data[3])
     interpLine = numpy.interp(ν,x,yL)
-    return interpLine,interpPhase,interpPhaseo
+    return interpLine,interpPhaseList #interpPhase,interpPhaseo
 
 def log_lhood(θ,x,data):
-    lineInterpY,phaseInterpY,phaseoInterpY = getProfiles(x,θ,data)
-    yLErr = data[7]; yPErr = x*0.0+0.07 #phase error wrong, should fit each individually
+    lineInterpY,phaseInterpList = getProfiles(x,θ,data)
+    yLErr = data[7]; #yPErr = x*0.0+0.07 #phase error wrong, should fit each individually
     indx=[0,1,2,6,7,8,12,13,14,18,19,20]; oindx=[3,4,5,9,10,11,15,16,17,21,22,23]
     lnLikeLine = -0.5*numpy.sum(((data[3]-lineInterpY)/yLErr)**2)
-    lnLikePhase = -0.5*numpy.sum(((numpy.mean(numpy.array(data[4])[indx],axis=0) - phaseInterpY)/yPErr)**2)
-    lnLikePhase = -0.5*numpy.sum(((numpy.mean(numpy.array(data[4])[oindx],axis=0) - phaseInterpY)/yPErr)**2)
-    return lnLikeLine + lnLikePhase + lnLikePhaseo
+    lnLikePhase = numpy.sum([-0.5*numpy.sum(((numpy.mean(numpy.array(data[4])[i],axis=0) - phaseInterpList[i])/data[5][i,:])**2) for i in range(len(phaseInterpList))])/len(phaseInterpList) #so it's weighted equally
+    #lnLikePhase = -0.5*numpy.sum(((numpy.mean(numpy.array(data[4])[oindx],axis=0) - phaseInterpY)/yPErr)**2)
+    return lnLikeLine + lnLikePhase #+ lnLikePhaseo
 
 def log_prior(θ):
     i,rMin,Mfac,rFac,f1,f2,f3 = θ
-    if i>0 and i<90 and rMin>500 and rMin<1e4 and Mfac>0 and rFac>0 and f1>=1 and f1<=1 and f2>=0 and f2<=1 and f3>=0 and f3<=1:
+    if i>0 and i<90 and rMin>500 and rMin<1e4 and Mfac>0 and rFac>0 and f1>=0 and f1<=1 and f2>=0 and f2<=1 and f3>=0 and f3<=1:
         return 0.0
     else:
         return -numpy.Inf
@@ -92,7 +97,7 @@ def log_prob(θ,x,data):
     else:
         return lnP + log_lhood(θ,x,data)
 
-def MC(nWalkers,θ0,p0,log_prob,vel,data,threads,burn=1000,iter=10000):
+def MC(nWalkers,θ0,p0,log_prob,vel,data,threads,burn=100,iter=1000):
     with Pool(threads) as pool:
         sampler = emcee.EnsembleSampler(nWalkers,len(θ0),log_prob,args=(vel,data),pool=pool)
         print("running burn-in")
@@ -102,7 +107,7 @@ def MC(nWalkers,θ0,p0,log_prob,vel,data,threads,burn=1000,iter=10000):
         pos,prob,state = sampler.run_mcmc(p0,iter,skip_initial_state_check=True,progress=True)
         return sampler,pos,prob,state
 
-def main(specifyThreads = False):
+def main(specifyThreads = False, save = True):
     if specifyThreads == False:
         threads = cpu_count() #for Summit job use all of them
     else:
@@ -111,12 +116,17 @@ def main(specifyThreads = False):
     data = readPickle("3c273_juljanmarmay_append_gilles_specirf_wide_v6.p")
     λCen = 2.172
     vel = (data[0]-λCen)/λCen*3e5
-    pert = [10.,100.,0.25,0.25,0.1,0.1,0.1] #i,rMin,Mfac,rFac,f1,f2,f3
-    nWalkers = 50; θ0 = [45.,1e3,1.,1.3,0.5,0.5,0.5] #i,rMin,Mfac,rFac,f1,f2,f3
+    pert = [20.,100.,0.5,0.5,0.25,0.25,0.25] #i,rMin,Mfac,rFac,f1,f2,f3
+    nWalkers = 50; θ0 = [45.,1e3,1.,1.,0.5,0.5,0.5] #i,rMin,Mfac,rFac,f1,f2,f3
     p0 = numpy.zeros((len(θ0),nWalkers))
     for n in range(len(pert)):
         p0[n] = [θ0[n]+pert[n]*numpy.random.randn(1) for j in range(nWalkers)]
     p0 = numpy.transpose(p0)
     sampler,pos,prob,state = MC(nWalkers,θ0,p0,log_prob,vel,data,threads)
     flat_samples = sampler.get_chain(flat=True)
-    return sampler,pos,prob,state,flat_samples
+    if save == True: #ie on summit
+        with open('pyEmceeVar.p','w') as f:
+            obj = [flat_samples,pos,prob] #really only care about flat_samples, don't think we need sampler/state
+            pickle.dump(obj,f)
+    else: #ie for interactive nb
+        return sampler,pos,prob,state,flat_samples
