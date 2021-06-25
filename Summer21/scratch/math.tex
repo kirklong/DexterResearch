@@ -12,7 +12,7 @@ Following from the $\hat{n}$ given in Waters and the rate of strain tensor terms
 \begin{equation} \label{eq1}
 \begin{split}
 \hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} = & \sin^2i\left[\frac{\partial v_r}{\partial r}\sin^2\phi + \left(\frac{\partial v_\phi}{\partial r} - \frac{v_\phi}{r}\right)\sin\phi\cos\phi + \frac{v_r}{r}\cos^2\phi \right] \\
-& -\sin i\cos i\left[\left(\frac{1}{r}\frac{\partial v_r}{\partial \theta} + \frac{1}{r} \frac{\partial v_\theta}{\partial r} - \frac{v_\theta}{r^2}\right)\sin\phi  + \frac{1}{r}\frac{\partial v_\phi}{\partial \theta}\cos\phi\right] \\
+& -\sin i\cos i\left[\left(\frac{1}{r}\frac{\partial v_r}{\partial \theta} + \frac{\partial v_\theta}{\partial r} - \frac{v_\theta}{r}\right)\sin\phi  + \frac{1}{r}\frac{\partial v_\phi}{\partial \theta}\cos\phi\right] \\
 & +\cos^2i\left(\frac{1}{r}\frac{\partial v_\theta}{\partial \theta} + \frac{v_r}{r}\right)
 \end{split}
 \end{equation}
@@ -22,7 +22,7 @@ Where in arriving at the form above we have assumed all of the $\frac{\partial}{
 \begin{equation} \label{eq2}
 \begin{split}
 \hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} = & \sin^2i\left[\frac{\partial v_r}{\partial r}\cos^2\phi - \left(\frac{\partial v_\phi}{\partial r} - \frac{v_\phi}{r}\right)\sin\phi\cos\phi + \frac{v_r}{r}\sin^2\phi \right] \\
-& -\sin i\cos i\left[\left(\frac{1}{r}\frac{\partial v_r}{\partial \theta} + \frac{1}{r} \frac{\partial v_\theta}{\partial r} - \frac{v_\theta}{r^2}\right) \cos\phi - \frac{1}{r}\frac{\partial v_\phi}{\partial \theta}\sin\phi\right] \\
+& -\sin i\cos i\left[\left(\frac{1}{r}\frac{\partial v_r}{\partial \theta} + \frac{\partial v_\theta}{\partial r} - \frac{v_\theta}{r}\right) \cos\phi - \frac{1}{r}\frac{\partial v_\phi}{\partial \theta}\sin\phi\right] \\
 & +\cos^2i\left(\frac{1}{r}\frac{\partial v_\theta}{\partial \theta} + \frac{v_r}{r}\right)
 \end{split}
 \end{equation}
@@ -36,7 +36,7 @@ Plugging in these approximations reduces equation two to:
 \begin{equation} \label{eq3}
 \begin{split}
 \hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} = & 3\frac{v_\phi}{r} \sin^2i\cos\phi\left[\sqrt{2}\cos\phi + \frac{\sin\phi}{2}\right]\\
-& -\sin i \cos i \left[\frac{1}{r}3\sqrt{2}\frac{v_\phi}{r}\cos\phi\right] \\
+& -\sin i \cos i \left[3\sqrt{2}\frac{v_\phi}{r}\cos\phi\right] \\
 & +\cos^2i\left(\frac{1}{r}\frac{v_{esc}}{(H/R)}\right)
 \end{split}
 \end{equation}
@@ -45,11 +45,11 @@ Rescaling $v_\phi$ into units of $r_s$ gives us $v_\phi = \sqrt{\frac{1}{2r'}}$ 
 
 \begin{equation} \label{eq4}
 \begin{split}
-\hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} \approx \frac{\mathrm{d}v_l}{\mathrm{d}l} \approx & \frac{3\sqrt{\frac{1}{2r}}}{r}\cos\phi\left[\sin^2i\left(\sqrt{2}\cos\phi + \frac{\sin\phi}{2}\right)-\frac{\sin i \cos i}{r}\right]\\
+\hat{n}\cdot\boldsymbol{\Lambda}\cdot\hat{n} \approx \frac{\mathrm{d}v_l}{\mathrm{d}l} \approx & \frac{3\sqrt{\frac{1}{2r}}}{r}\cos\phi\left[\sin^2i\left(\sqrt{2}\cos\phi + \frac{\sin\phi}{2}\right)-\sin i \cos i\right]\\
 & + \cos^2i\frac{1}{\sqrt{r^3}}
 \end{split}
 \end{equation}
 
-This is the form used currently in the fitting routine in the code. Since the $\sin i\cos i$ term is divided again by the radius and we are usually at $r_s > 1000$ this term is usually very small and does not contribute, but the inclination dependence makes the $\cos^2i$ term very important at low inclinations and changes the overall shape of the line profile significantly.
+This is the form used currently in the fitting routine in the code. The inclination dependence makes the $\cos^2i$ term very important at low inclinations, and the addition of both terms at moderate inclinations make a significant difference when compared with the results shown in CM96. It's also interesting that the $\cos^2i$ term has no $\phi$ dependence.
 
 \end{document}
