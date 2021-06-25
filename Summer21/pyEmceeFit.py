@@ -31,7 +31,7 @@ def setup(i=75,nx=2048,ny=2048,rlim=3e4):
     r = numpy.sqrt(β**2/cosi**2+α**2); φ = numpy.arctan2(β,α*cosi)
     ν = 1+numpy.sqrt(1/(2*r))*sini*numpy.cos(φ)
     return α,β,r,ν,φ,sini,cosi
-iter
+
 def getIntensity(r,φ,windWeight,sini,cosi,rMin=1e3,γ=1,A0=1,τ=10,f1=1,f2=1,f3=1):
     φn = φ + numpy.pi/2
     grad_v = dvldl(r,sini,cosi,φn,windWeight,f1,f2,f3)
@@ -39,15 +39,17 @@ def getIntensity(r,φ,windWeight,sini,cosi,rMin=1e3,γ=1,A0=1,τ=10,f1=1,f2=1,f3
     I = intensity(A,r,grad_v,τ); I[r<rMin] = 0
     return I,γ,A0,τ
 
-def phase(ν,I,x,y,U,V,bins=100):
-    dφMap = -2*numpy.pi*(x*U+y*V)*I*180/numpy.pi*1e6
+def phase(ν,I,x,y,U,V,rot,bins=100): #rot go between 0 and 2π, fit for this also (proxy for pos angle, need to do math to backtrack after fit though)
+    rot = rot/180*numpy.pi
+    un = numpy.cos(rot)*U+numpy.sin(rot)*V; vn = -numpy.sin(rot)*U+numpy.cos(rot)*V
+    dφMap = -2*numpy.pi*(x*un+y*vn)*I*180/numpy.pi*1e6
     dφ,edges,n = binned_statistic(ν.flatten(),dφMap.flatten(),statistic="sum",bins=bins)
     iSum,edges,n = binned_statistic(ν.flatten(),I.flatten(),statistic="sum",bins=bins)
     iSum[iSum==0]=1
     return dφ/iSum
 
 def getProfiles(ν,params,data,bins=100,nx=2048,ny=2048):
-    i,rMin,Mfac,rFac,f1,f2,f3=params; windWeight=1 #setting to 1 perm for now
+    i,rMin,Mfac,rFac,f1,f2,f3,pa=params; windWeight=1 #setting to 1 perm for now
     blRange=Mfac*3e8*2e33*6.67e-8/9e20/548/3.09e24
     α,β,r,νloc,φ,sini,cosi = setup(i,nx,ny)
     I,γ,A0,τ = getIntensity(r,φ,windWeight,sini,cosi,rMin,f1=f1,f2=f2,f3=f3)
@@ -58,7 +60,7 @@ def getProfiles(ν,params,data,bins=100,nx=2048,ny=2048):
     dφList=[]
     for i in range(len(UData)):
         for ii in [I]:
-            dφAvgRaw=phase(νloc,ii,X,Y,UData[i],VData[i],bins)
+            dφAvgRaw=phase(νloc,ii,X,Y,UData[i],VData[i],pa,bins)
             dφAvg=gaussian_filter1d(dφAvgRaw,psf/3e5/(νBin[1]-νBin[0]))
             dφList.append(dφAvg)
     fline=flux/numpy.max(flux)*0.6/(1+flux/numpy.max(flux)*0.6)
@@ -79,13 +81,14 @@ def log_lhood(θ,x,data):
     yLErr = data[7]; #yPErr = x*0.0+0.07 #phase error wrong, should fit each individually
     indx=[0,1,2,6,7,8,12,13,14,18,19,20]; oindx=[3,4,5,9,10,11,15,16,17,21,22,23]
     lnLikeLine = -0.5*numpy.sum(((data[3]-lineInterpY)/yLErr)**2)
-    lnLikePhase = numpy.sum([-0.5*numpy.sum(((numpy.mean(numpy.array(data[4])[i],axis=0) - phaseInterpList[i])/data[5][i,:])**2) for i in range(len(phaseInterpList))])/len(phaseInterpList) #so it's weighted equally
+    #multiply = [1 if i in indx else 0 for i in range(24)] #24 different phase curves, want to zero out the "off" ones because they are messing up the fit, don't want to do a for loop
+    lnLikePhase = numpy.sum([-0.5*numpy.sum(((data[4][i] - phaseInterpList[i])/data[5][i,:])**2) for i in range(len(phaseInterpList))]) #so it's weighted equally, don't do, because no differnce in χ2
     #lnLikePhase = -0.5*numpy.sum(((numpy.mean(numpy.array(data[4])[oindx],axis=0) - phaseInterpY)/yPErr)**2)
     return lnLikeLine + lnLikePhase #+ lnLikePhaseo
 
 def log_prior(θ):
-    i,rMin,Mfac,rFac,f1,f2,f3 = θ
-    if i>0 and i<90 and rMin>500 and rMin<1e4 and Mfac>0 and rFac>0 and f1>=0 and f1<=1 and f2>=0 and f2<=1 and f3>=0 and f3<=1:
+    i,rMin,Mfac,rFac,f1,f2,f3,pa = θ
+    if i>0 and i<90 and rMin>250 and rMin<1e4 and Mfac>0 and rFac>0 and f1>=0 and f1<=1 and f2>=0 and f2<=1 and f3>=0 and f3<=1 and pa>=0 and pa<360:
         return 0.0
     else:
         return -numpy.Inf
@@ -116,8 +119,8 @@ def main(specifyThreads = False, save = True):
     data = readPickle("3c273_juljanmarmay_append_gilles_specirf_wide_v6.p")
     λCen = 2.172
     vel = (data[0]-λCen)/λCen*3e5
-    pert = [20.,100.,0.5,0.5,0.25,0.25,0.25] #i,rMin,Mfac,rFac,f1,f2,f3
-    nWalkers = 50; θ0 = [45.,1e3,1.,1.,0.5,0.5,0.5] #i,rMin,Mfac,rFac,f1,f2,f3
+    pert = [0.3,10.,0.05,0.05,0.01,0.01,0.01,3.,] #i,rMin,Mfac,rFac,f1,f2,f3, pa, try for 0.5% around initial guess
+    nWalkers = 50; θ0 = [30.,1e3,1.1,1.,0.57,0.6,0.46,342.] #i,rMin,Mfac,rFac,f1,f2,f3,pa
     p0 = numpy.zeros((len(θ0),nWalkers))
     for n in range(len(pert)):
         p0[n] = [θ0[n]+pert[n]*numpy.random.randn(1) for j in range(nWalkers)]
@@ -125,7 +128,7 @@ def main(specifyThreads = False, save = True):
     sampler,pos,prob,state = MC(nWalkers,θ0,p0,log_prob,vel,data,threads)
     flat_samples = sampler.get_chain(flat=True)
     if save == True: #ie on summit
-        with open('pyEmceeVar.p','w') as f:
+        with open("pyEmceeVar.p","wb") as f:
             obj = [flat_samples,pos,prob] #really only care about flat_samples, don't think we need sampler/state
             pickle.dump(obj,f)
     else: #ie for interactive nb
