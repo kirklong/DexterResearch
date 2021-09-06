@@ -12,7 +12,7 @@ def readPickle(file):
 def dvldl(r,sini,cosi,φ,windWeight=0,f1=1,f2=1,f3=1): #line of sight velocity gradient
     windφ1 = 3*numpy.sqrt(1/(2*r))/r*sini**2*numpy.cos(φ)*(numpy.sqrt(2)*numpy.cos(φ)+numpy.sin(φ)/2)
     windφ2 = cosi**2*(1/(r**(3/2)))
-    windφ3 = -3*numpy.sqrt(1/(2*r))/r*sini*cosi
+    windφ3 = -3*numpy.sqrt(1/(2*r))/r*sini*cosi*numpy.cos(φ)
     diskφ = 3*numpy.sqrt(1/(2*r))/r*sini**2*numpy.cos(φ)*(numpy.cos(φ)*numpy.sin(φ)/2)
     dvl = (1-windWeight)*diskφ+windWeight*(f1*windφ1+f2*windφ2+f3*windφ3)
     return dvl
@@ -43,24 +43,25 @@ def setup(i=30.,rBar=2e3,rFac=15.,nρ=512,nΦ=2048):
         dA[i,:] = rMesh[i,:]*Δr*Δφ
     return α,β,r,ν,φ,sini,cosi,dA,rMin,rLim
 
-def getIntensity(r,φ,windWeight,sini,cosi,rMin=1e3,γ=1,A0=1,τ=10,f1=1,f2=1,f3=1):
+def getIntensity(r,φ,windWeight,sini,cosi,rMin,f1=1,f2=1,f3=1,γ=1,A0=1,τ=10,):
     φn = φ + numpy.pi/2
     grad_v = dvldl(r,sini,cosi,φn,windWeight,f1,f2,f3)
     A = getA(A0,r,γ)
-    I = intensity(A,r,grad_v,τ); I[r<rMin] = 0
+    I = intensity(A,r,grad_v,τ)
+    I[r<rMin] = 0.
     return I,γ,A0,τ
 
 def phase(ν,I,dA,x,y,r,U,V,rot,bins=100): #rot go between 0 and 2π, fit for this also (proxy for pos angle, need to do math to backtrack after fit though)
     rot = rot/180*numpy.pi
-    un = numpy.cos(rot)*U+numpy.sin(rot)*V; vn = -numpy.sin(rot)*U+numpy.cos(rot)*V
+    un = numpy.cos(rot)*U+numpy.sin(rot)*V; vn = -numpy.sin(rot)*U+numpy.cos(rot)*V #positive RA on the sky is to the left, and the -2pi i (ux+vy) assumes x and y are in Delta RA and Delta Dec
     dφMap = -2*numpy.pi*(x*un+y*vn)*I*180/numpy.pi*1e6
     #Δlnr = numpy.abs(numpy.log(r[1][0])-numpy.log(r[0][0])); Δφ = numpy.abs(φ[0][1]-φ[0][0])
     dφ,edges,n = binned_statistic(ν.flatten(),(dφMap*dA).flatten(),statistic="sum",bins=bins)
-    iSum,edges,n = binned_statistic(ν.flatten(),(I*dA).flatten(),statistic="sum",bins=bins)
+    iSum,edges,n = binned_statistic(ν.flatten(),(I*dA).flatten(),statistic="sum",bins=bins) #this integrates I as a function of ν, returns the binned intensity "sum" along bins of ν
     iSum[iSum==0]=1 #it's never zero anymore so save computation time
     return dφ/iSum
 
-def getProfiles(ν,params,data,bins=100,nρ=512,nΦ=2048): #get the phase and line profiles, matched to data
+def getProfiles(params,data,bins=100,nρ=512,nΦ=2048): #get the phase and line profiles, matched to data
 
     # the “correct” ordering is
     # --calculate spectrum at some higher spectral resolution than we have at the instrument
@@ -68,10 +69,13 @@ def getProfiles(ν,params,data,bins=100,nρ=512,nΦ=2048): #get the phase and li
     # --smooth the spectrum and phase curves with the Gaussian kernel
     # --sample them at the locations of the data
 
-    i,rBar,Mfac,rFac,f1,f2,f3,pa,scale=params; windWeight=1 #setting to 1 perm for now
+    i,rBar,Mfac,rFac,f1,f2,f3,pa,scale,cenShift=params; windWeight=1 #setting to 1 perm for now
+    λCen = 2.172+cenShift
+    ν = (data[0]-λCen)/λCen*3e5
     blRange=Mfac*3e8*2e33*6.67e-8/9e20/548/3.09e24  #solar masses * g / c^2 / Mpc -> end units = rad
     α,β,r,νloc,φ,sini,cosi,dA,rMin,rLim = setup(i,rBar,rFac,nρ,nΦ) #coordinate system / param setup
     I,γ,A0,τ = getIntensity(r,φ,windWeight,sini,cosi,rMin,f1=f1,f2=f2,f3=f3) #get the intensity from setup params
+    I[r<rMin]=0. #sometimes it doesn't take the first time??? weirdest fucking bug
     flux,νEdges,n = binned_statistic(νloc.flatten(),(I*dA).flatten(),statistic="sum",bins=100) #100 bins high enough resolution for step 1?
     νBin = 0.5*(νEdges[1:]+νEdges[:-1])
     UData=data[1];VData=data[2]; psf=4e-3/2.35 #baseline data, psf value provided by Jason for Gaussian 1D filter
@@ -83,7 +87,7 @@ def getProfiles(ν,params,data,bins=100,nρ=512,nΦ=2048): #get the phase and li
             dφAvg=gaussian_filter1d(dφAvgRaw,psf/3e5/(νBin[1]-νBin[0])) #apply filter, step 3 for phase
             dφList.append(dφAvg)
 
-    fline=flux/numpy.max(flux)*numpy.max(data[3])*scale/(1+flux/numpy.max(flux)*numpy.max(data[3])*scale) #rescale flux
+    fline=flux/numpy.max(flux)*numpy.max(data[3])*scale#/(1+flux/numpy.max(flux)*numpy.max(data[3])*scale) #rescale flux
     lineAvg = gaussian_filter1d(fline,psf/3e5/(νBin[1]-νBin[0])) #you can use gaussian_filter1d with a kernel size sigma of n_channels = 4e-3/2.35 / (\Delta \lambda) with \Delta \lambda in microns
 
     indx=[0,1,2,6,7,8,12,13,14,18,19,20]; oindx=[3,4,5,9,10,11,15,16,17,21,22,23]
@@ -93,37 +97,37 @@ def getProfiles(ν,params,data,bins=100,nρ=512,nΦ=2048): #get the phase and li
         interpPhase = numpy.interp(ν,x,yP) #generate interpolation so we can compare directly to data points, step4 for phase
         interpPhaseList.append(interpPhase)
 
-    yL = flux/numpy.max(flux)*numpy.max(data[3])*scale #normalize flux
-    yLAvg = gaussian_filter1d(yL,psf/3e5/(νBin[1]-νBin[0])) #apply filter, step 3 for line
-    interpLine = numpy.interp(ν,x,yLAvg) #generate interpolation to directly compare to data, step 4 for line
+    #yL = flux/numpy.max(flux)*numpy.max(data[3])*scale #normalize flux
+    #yLAvg = gaussian_filter1d(yL,psf/3e5/(νBin[1]-νBin[0])) #apply filter, step 3 for line
+    interpLine = numpy.interp(ν,x,lineAvg) #generate interpolation to directly compare to data, step 4 for line
     #NOTE: the size in r_g is scaled to produce the line width and then M_BH is adjusted to match the differential phase amplitude by fit
     return interpLine,interpPhaseList
 
-def log_lhood(θ,x,data):
-    lineInterpY,phaseInterpList = getProfiles(x,θ,data)
-    yLErr = data[7]; #yPErr = x*0.0+0.07 #phase error wrong, should fit each individually
+def log_lhood(θ,data):
+    lineInterpY,phaseInterpList = getProfiles(θ,data)
+    yLErr = data[6]; #yPErr = x*0.0+0.07 #phase error wrong, should fit each individually
     indx=[0,1,2,6,7,8,12,13,14,18,19,20]; oindx=[3,4,5,9,10,11,15,16,17,21,22,23]
     lnLikeLine = -0.5*numpy.sum(((data[3]-lineInterpY)/yLErr)**2)
     lnLikePhase = numpy.sum([-0.5*numpy.sum(((data[4][i] - phaseInterpList[i])/data[5][i,:])**2) for i in range(len(phaseInterpList))]) #so it's weighted equally, UPDATE don't do, because no differnce in χ2 when comparing avg vs individual profiles
     return lnLikeLine + lnLikePhase #+ lnLikePhaseo
 
 def log_prior(θ):
-    i,rBar,Mfac,rFac,f1,f2,f3,pa,scale = θ
-    if i>0 and i<90 and rBar>250 and rBar<1e4 and Mfac>0 and rFac>1 and f1>=0 and f1<=1 and f2>=0 and f2<=1 and f3>=0 and f3<=1 and pa>=0 and pa<360 and scale>0:
+    i,rBar,Mfac,rFac,f1,f2,f3,pa,scale,cenShift = θ
+    if i>0 and i<90 and rBar>250 and rBar<1e4 and Mfac>0 and rFac>1 and f1>=0 and f1<=1 and f2>=0 and f2<=1 and f3>=0 and f3<=1 and pa>=0 and pa<360 and scale>0 and numpy.abs(cenShift) < 0.1:
         return 0.0
     else:
         return -numpy.Inf
 
-def log_prob(θ,x,data):
+def log_prob(θ,data):
     lnP = log_prior(θ)
     if lnP == -numpy.Inf:
         return -numpy.Inf
     else:
-        return lnP + log_lhood(θ,x,data)
+        return lnP + log_lhood(θ,data)
 
-def MC(nWalkers,θ0,p0,log_prob,vel,data,threads,burn=100,iter=5000):
+def MC(nWalkers,θ0,p0,log_prob,data,threads,burn=100,iter=3000):
     with Pool(threads) as pool:
-        sampler = emcee.EnsembleSampler(nWalkers,len(θ0),log_prob,args=(vel,data),pool=pool)
+        sampler = emcee.EnsembleSampler(nWalkers,len(θ0),log_prob,args=[data],pool=pool)
         print("running burn-in")
         p0,_,_ = sampler.run_mcmc(p0,burn,skip_initial_state_check=True,progress=True)
         sampler.reset()
@@ -138,15 +142,13 @@ def main(specifyThreads = False, save = True):
         threads = 4 #for my computer
     print("running with {} threads".format(threads))
     data = readPickle("3c273_juljanmarmay_append_gilles_specirf_wide_v6.p")
-    λCen = 2.172
-    vel = (data[0]-λCen)/λCen*3e5
-    pert = [0.5,50.,0.01,0.1,0.01,0.01,0.01,3.,0.01] #i,rBar,Mfac,rFac,f1,f2,f3, pa, scale, try for 0.5% around initial guess
-    nWalkers = 96; θ0 = [30.,3e3,0.7,30.,0.6,0.6,0.4,340.,1.1]#[30.,1e3,1.1,1.,0.57,0.6,0.46,342.] #i,rBar,Mfac,rFac,f1,f2,f3,pa,scale
+    pert = [0.5,50.,0.01,0.1,0.01,0.01,0.01,3.,0.01,0.001] #i,rBar,Mfac,rFac,f1,f2,f3, pa, scale, cenShift, try for 0.5% around initial guess
+    nWalkers = 24; θ0 = [33.74,2349.72,0.77,15.96,0.87,0.06,0.24,343.49,1.03,0.00035]#[30.,1e3,1.1,1.,0.57,0.6,0.46,342.] #i,rBar,Mfac,rFac,f1,f2,f3,pa,scale,cenShift
     p0 = numpy.zeros((len(θ0),nWalkers))
     for n in range(len(pert)):
         p0[n] = [θ0[n]+pert[n]*numpy.random.randn(1) for j in range(nWalkers)]
     p0 = numpy.transpose(p0)
-    sampler,pos,prob,state = MC(nWalkers,θ0,p0,log_prob,vel,data,threads)
+    sampler,pos,prob,state = MC(nWalkers,θ0,p0,log_prob,data,threads)
     flat_samples = sampler.get_chain(flat=True)
     if save == True: #ie on summit
         with open("pyEmceeVar.p","wb") as f:
