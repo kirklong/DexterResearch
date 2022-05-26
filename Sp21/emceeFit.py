@@ -26,8 +26,8 @@ def log_lhood(θ,data):
     return lnLikeLine + lnLikePhase #+ lnLikePhaseo
 
 def log_prior(θ):
-    i,rBar,Mfac,rFac,f1,f2,f3,pa,scale,cenShift = θ
-    if i>0 and i<90 and rBar>250 and rBar<1e4 and Mfac>0 and rFac>1 and f1>=0 and f1<=1 and f2>=0 and f2<=1 and f3>=0 and f3<=1 and pa>=0 and pa<360 and scale>0 and numpy.abs(cenShift) < 0.1:
+    i,rBar,Mfac,rFac,f1,f2,f3,f4,pa,scale,cenShift = θ
+    if i>0 and i<90 and rBar>250 and rBar<1e4 and Mfac>0 and rFac>1 and f1>=0 and f1<=1 and f2>=-1 and f2<=1 and f3>=-1 and f3<=1 and f4>=0 and f4<=1 and pa>=0 and pa<360 and scale>0 and numpy.abs(cenShift) < 0.1 and numpy.sign(f2) == numpy.sign(f3):
         return 0.0
     else:
         return -numpy.Inf
@@ -57,8 +57,8 @@ def main(specifyThreads = False, save = True, burn=100,iter=3000):
 
     print("running with {} threads".format(threads))
     data = readPickle("3c273_juljanmarmay_append_gilles_specirf_wide_v6.p")
-    pert = [5.,500.,0.1,1.,0.1,0.1,0.1,10.,0.1,0.01] #i,rBar,Mfac,rFac,f1,f2,f3, pa, scale, cenShift, try for 0.5% around initial guess
-    nWalkers = 24; θ0 = [33.74,2349.72,0.77,15.96,0.87,0.06,0.24,343.49,1.03,0.00035]#[30.,1e3,1.1,1.,0.57,0.6,0.46,342.] #i,rBar,Mfac,rFac,f1,f2,f3,pa,scale,cenShift
+    pert = [40.,1e3,0.5,15.,0.4,0.8,0.8,0.4,50.,0.01,0.001] #i,rBar,Mfac,rFac,f1,f2,f3, pa, scale, cenShift, try for 0.5% around initial guess
+    nWalkers = 24; θ0 = [45.,3e3,1.,30.,0.5,0.,0.,0.5,300,1.,0.]#[30.,1e3,1.1,1.,0.57,0.6,0.46,342.] #i,rBar,Mfac,rFac,f1,f2,f3,f4,pa,scale,cenShift
     p0 = numpy.zeros((len(θ0),nWalkers))
     for n in range(len(pert)):
         p0[n] = [θ0[n]+pert[n]*numpy.random.randn(1) for j in range(nWalkers)]
