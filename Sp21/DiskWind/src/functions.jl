@@ -160,7 +160,7 @@ function phase(ν::Array{Float64,2},I::Array{Float64,2},dA::Array{Float64,2},x::
 
     rot = rot/180*π
     u′ = cos(rot)*U+sin(rot)*V; v′ = -sin(rot)*U+cos(rot)*V
-    dϕMap = -2*π*(x.*u′.+y.*v′).*I.*180/π*1e6
+    dϕMap = -2*π*(x.*u′.+y.*v′).*I.*180/π*1e6 #should this be I/(1+I) (see dphi paper) -- no, this is taken care of later, *I here is for centroid weighting
     edges,centers,dϕ = histSum(ν,dϕMap.*dA,bins=bins,νMin=νMin,νMax=νMax)
     edges,centers,iSum = histSum(ν,I.*dA,bins=bins,νMin=νMin,νMax=νMax)
     iSum[iSum .== 0.] .= 1.
@@ -199,7 +199,7 @@ function getProfiles(params::Array{Float64,},data::Array{Array{Float64,N} where 
     x = reverse(λ) #need to go from low to high for interpolation
     λData = data[1]
     for i=1:length(dϕList)
-        yP = dϕList[i].*reverse(lineAvg) #so it matches x
+        yP = dϕList[i].*reverse(lineAvg)./(1 .+ reverse(lineAvg)) #so it matches x, rescale by f/(1+f)
         interpPhase = LinearInterpolation(x,yP,extrapolation_bc=Line())
         push!(interpPhaseList,interpPhase.(λData))
     end
