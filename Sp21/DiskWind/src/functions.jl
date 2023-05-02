@@ -20,7 +20,7 @@ end
 
 meshgrid(x,y) = (repeat(x,outer=length(y)), repeat(y,inner=length(x)))
 
-function setup(i::Float64,n1::Int64,n2::Int64,r̄::Float64,rFac::Float64,γ::Float64,coordsType::Symbol=:polar,scale::Symbol=:log)
+function setup(i::Float64,n1::Int64,n2::Int64,r̄::Float64,rFac::Float64,γ::Float64,coordsType::Symbol=:polar,scale::Symbol=:log; return_t::Bool=false)
     rMin,rMax = get_rMinMax(r̄,rFac,γ)
     i = i/180*π; cosi = cos(i); sini = sin(i) #inclination angle in rad
     α = nothing; β = nothing; r = nothing; ν = nothing; ϕ = nothing; dA = nothing
@@ -101,7 +101,12 @@ function setup(i::Float64,n1::Int64,n2::Int64,r̄::Float64,rFac::Float64,γ::Flo
         println("invalid coords system -- should be :cartesian or :polar")
         exit()
     end
-    return reshape(α,n1,n2),reshape(β,n1,n2),r,ν,ϕ,sini,cosi,dA,rMin,rMax
+    if return_t == true
+        t = r .* (1 .+ sin.(ϕ).*sini) #to get to real units multiply by (rs/c/days) 
+        return reshape(α,n1,n2),reshape(β,n1,n2),r,ν,ϕ,sini,cosi,dA,rMin,rMax, t
+    else    
+        return reshape(α,n1,n2),reshape(β,n1,n2),r,ν,ϕ,sini,cosi,dA,rMin,rMax
+    end
 end
 
 getA(A0::Float64,r::Array{Float64,2},γ::Float64) = A0.*r.^γ
@@ -169,7 +174,8 @@ end
 
 function getProfiles(params::Array{Float64,},data::Array{Array{Float64,N} where N, 1};
     bins::Int=200,nr::Int=1024,nϕ::Int=2048,coordsType::Symbol=:polar,scale_type::Symbol=:log,
-    νMin::Float64=0.98, νMax::Float64=1.02, centered::Bool=true) #corresponds to +/- 6 km/s by default
+    νMin::Float64=0.98, νMax::Float64=1.02, centered::Bool=true, return_phase::Bool=true, return_LP::Bool=true, 
+    return_t::Bool=false) #corresponds to +/- 6 km/s by default
     #this is ~3x as fast as python version!
 
     i,r̄,Mfac,rFac,f1,f2,f3,f4,pa,scale,cenShift = params; γ = 1.; A0 = 1.; τ = 10. #some parameters fixed for now
@@ -177,33 +183,63 @@ function getProfiles(params::Array{Float64,},data::Array{Array{Float64,N} where 
     #ν = (data[1].-2.172)./λCen #code units, cenShift should be small this is just for calculating min and max
     BLRAng = Mfac*3e8*2e33*6.67e-8/9e20/548/3.09e24 #solar masses * G / c^2 / Mpc -> end units = rad
     α,β,r,ν,ϕ,sini,cosi,dA,rMin,rMax = setup(i,nr,nϕ,r̄,rFac,γ,coordsType,scale_type)
-    I,γ,A0,τ = getIntensity(r,ϕ,sini,cosi,rMin,rMax,γ,A0,τ,f1=f1,f2=f2,f3=f3,f4=f4)
-    νEdges,νCenters,flux = histSum(ν,I.*dA,bins=bins,νMin=νMin,νMax=νMax,centered=centered)
+    t = nothing
+    rs = 2*Mfac*3e8*2e30*6.67e-11/9e16
+    if return_t
+        days = 365*24*3600.
+        t = r .* (rs/3e8/days) .* (1 .+ sin.(ϕ).*sini)
+    end
 
-    UData = data[2]; VData = data[3]; psf=4e-3/2.35
-    X = α.*BLRAng; Y = β.*BLRAng
-    dϕList = []
-    for i=1:length(UData)
-        for ii in [I]
-            dϕAvgRaw = phase(ν,ii,dA,X,Y,r,UData[i],VData[i],pa,νMin,νMax,bins)
-            dϕAvg = G1D(dϕAvgRaw,psf/3e5/(νCenters[2]-νCenters[1]))
-            push!(dϕList,dϕAvg)
+    I,γ,A0,τ = getIntensity(r,ϕ,sini,cosi,rMin,rMax,γ,A0,τ,f1=f1,f2=f2,f3=f3,f4=f4)
+    interpLine = nothing; interpPhaseList = nothing; interp_τ = nothing
+    if return_LP || return_phase
+        νEdges,νCenters,flux = histSum(ν,I.*dA,bins=bins,νMin=νMin,νMax=νMax,centered=centered)
+        λ = λCen ./ νCenters #ν is really ν/ν_c -> ν/ν_c = (c/λ)/(c/λ_c) = λ_c/λ -> λ = λ_c / (ν/ν_c) = λ / code ν
+        fline = flux./maximum(flux)*maximum(data[4])*scale
+        psf=4e-3/2.35
+        lineAvg = G1D(fline,psf/3e5/(νCenters[2]-νCenters[1]))
+
+        x = reverse(λ) #need to go from low to high for interpolation
+        interpLine = LinearInterpolation(x,reverse(lineAvg),extrapolation_bc=Line())
+
+        if return_phase
+            UData = data[2]; VData = data[3]; 
+            X = α.*BLRAng; Y = β.*BLRAng
+            dϕList = []
+            for i=1:length(UData)
+                for ii in [I]
+                    dϕAvgRaw = phase(ν,ii,dA,X,Y,r,UData[i],VData[i],pa,νMin,νMax,bins)
+                    dϕAvg = G1D(dϕAvgRaw,psf/3e5/(νCenters[2]-νCenters[1]))
+                    push!(dϕList,dϕAvg)
+                end
+            end
+            indx=[0,1,2,6,7,8,12,13,14,18,19,20].+1; oindx=[3,4,5,9,10,11,15,16,17,21,22,23].+1
+            interpPhaseList = []; 
+            λData = data[1]
+            for i=1:length(dϕList)
+                yP = dϕList[i].*reverse(lineAvg)./(1 .+ reverse(lineAvg)) #so it matches x, rescale by f/(1+f)
+                interpPhase = LinearInterpolation(x,yP,extrapolation_bc=Line())
+                push!(interpPhaseList,interpPhase.(λData))
+            end
         end
     end
 
-    fline = flux./maximum(flux)*maximum(data[4])*scale
-    lineAvg = G1D(fline,psf/3e5/(νCenters[2]-νCenters[1]))
-
-    indx=[0,1,2,6,7,8,12,13,14,18,19,20].+1; oindx=[3,4,5,9,10,11,15,16,17,21,22,23].+1
-    interpPhaseList = []; λ = λCen ./ νCenters #ν is really ν/ν_c -> ν/ν_c = (c/λ)/(c/λ_c) = λ_c/λ -> λ = λ_c / (ν/ν_c) = λ / code ν
-    x = reverse(λ) #need to go from low to high for interpolation
-    λData = data[1]
-    for i=1:length(dϕList)
-        yP = dϕList[i].*reverse(lineAvg)./(1 .+ reverse(lineAvg)) #so it matches x, rescale by f/(1+f)
-        interpPhase = LinearInterpolation(x,yP,extrapolation_bc=Line())
-        push!(interpPhaseList,interpPhase.(λData))
+    if return_t
+        tData = data[end]
+        tData = tData .- tData[1] #start from 0
+        tEdges,tCenters,flux = histSum(t,I.*dA,bins=bins,νMin=0.0,νMax=maximum(tData),centered=centered)
+        interp_τ = LinearInterpolation(tCenters,flux,extrapolation_bc=Line())
     end
 
-    interpLine = LinearInterpolation(x,reverse(lineAvg),extrapolation_bc=Line())
-    return λData, interpLine.(λData), interpPhaseList
+    if return_phase
+        λData = data[1]
+        if return_LP
+            if return_t
+                tData = data[end] .- data[end][1]
+                return λData,interpLine.(λData),interpPhaseList,interp_τ.(tData)
+            end
+            return λData,interpLine.(λData),interpPhaseList
+        end
+        return λData,interpPhaseList
+    end
 end
